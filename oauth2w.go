@@ -15,13 +15,15 @@ import (
 	"net/http"
 )
 
+type ctxkey string
+
 const (
 	errMsgInternalServerError = "internal server error"
 	errMsgPermissionDenied    = "permission denied"
 
 	claimEmail = "email"
 
-	ctxkeyUser = "github.com/i-core/oauth2w/user"
+	ctxkeyUser ctxkey = "github.com/i-core/oauth2w/user"
 )
 
 // User contains data of an authenticated user.
