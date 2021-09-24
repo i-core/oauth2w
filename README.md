@@ -2,7 +2,7 @@
 
 [![GoDoc][doc-img]][doc] [![Build Status][build-img]][build] [![codecov][codecov-img]][codecov] [![Go Report Card][goreport-img]][goreport]
 
-oauth2w is a HTTP middleware that enables authorization via [the OpenID Connect protocol][oidc-spec-core].
+oauth2w provides HTTP middlewares that enables authorization via [the OpenID Connect protocol][oidc-spec-core].
 
 ## Installation
 
@@ -13,9 +13,10 @@ go get github.com/i-core/oauth2w
 ## How it works
 
 1. A client sends HTTP request that contains an OpenID Connect Access Token within the header `Authorization`.
-2. The middleware requests user claims using the userinfo's endpoint of OpenID Connect Provider.
-3. The middleware requests user roles using the interface `oauth2w.RoleFinder`.
-4. The middleware validates that the user has the required roles, and according to it, allows or not the HTTP request.
+2. The authentication middleware requests user claims using the userinfo's endpoint of OpenID Connect Provider
+   and put user data to the request context using the interface `oauth2w.RoleFinder`.
+3. The authorization middleware requests user roles from user data in the request context.
+4. The authorization middleware validates that a user has the required roles, and according to it, allows or not the HTTP request.
 
 **Notes**. Getting user roles is out of scope the library. You must provide an implementation of `oauth2w.RoleFinder`
 that receives user claims and returns the user's roles.
@@ -38,18 +39,19 @@ import (
 const oidcEndpoint = "https://openid-connect-provider.org"
 
 func main() {
-    authw, err := oauth2w.New(oidcEndpoint, &RoleFinder{})
+    authenticationw, err := oauth2w.NewAuthenticationMW(oidcEndpoint, &RoleFinder{})
     if err != nil {
         fmt.Fprintln(os.Stderr, err)
         os.Exit(1)
     }
+    authorizationw := oauth2w.NewAuthorizationMW()
 
-    http.HandleFunc("/profile", authw([]string{"user"})(func(w http.ResponseWriter, r *http.Request) {
+    http.HandleFunc("/profile", authenticationw(authorizationw([]string{"user"})(func(w http.ResponseWriter, r *http.Request) {
         fmt.Println("Profile page")
-    }))
-    http.HandleFunc("/admin", authw([]string{"admin"})(func(w http.ResponseWriter, r *http.Request) {
+    })))
+    http.HandleFunc("/admin", authenticationw(authorizationw([]string{"admin"})(func(w http.ResponseWriter, r *http.Request) {
         fmt.Println("Admin page")
-    }))
+    })))
 
     fmt.Println(http.ListenAndServe(":8080", nil))
 }
@@ -103,8 +105,39 @@ func main() {
             fmt.Println(params...)
         }
     }
-    authw, err := oauth2w.New(oidcEndpoint, &RoleFinder{}, oauth2w.WithLogPrint(logPrintFn), oauth2w.WithLogDebug(logDebugFn))
+    authw, err := oauth2w.NewAuthenticationMW(oidcEndpoint, &RoleFinder{}, oauth2w.WithLogPrint(logPrintFn), oauth2w.WithLogDebug(logDebugFn))
     // ...
+}
+```
+
+### Accessing user data
+
+```go
+package main
+
+import (
+    "fmt"
+    "net/http"
+    "os"
+
+    "github.com/i-core/oauth2w"
+)
+
+const oidcEndpoint = "https://openid-connect-provider.org"
+
+func main() {
+    authenticationw, err := oauth2w.NewAuthenticationMW(oidcEndpoint, &RoleFinder{})
+    if err != nil {
+        fmt.Fprintln(os.Stderr, err)
+        os.Exit(1)
+    }
+
+    http.HandleFunc("/profile", authenticationw(func(w http.ResponseWriter, r *http.Request) {
+        user, ok := oauth2w.FindUser(r.Context())
+        fmt.Printf("User %v\n", user)
+    }))
+
+fmt.Println(http.ListenAndServe(":8080", nil))
 }
 ```
 
@@ -151,7 +184,7 @@ const (
 )
 
 func main() {
-    authw, err := oauth2w.New(oidcEndpoint, werther.NewRoleFinder(roleGroupID).WithRoleClaim(roleClaim))
+    authw, err := oauth2w.NewAuthenticationMW(oidcEndpoint, werther.NewRoleFinder(roleGroupID).WithRoleClaim(roleClaim))
     // ...
 }
 ```
@@ -167,19 +200,14 @@ The code in this project is licensed under [MIT license][license].
 
 [doc-img]: https://godoc.org/github.com/i-core/oauth2w?status.svg
 [doc]: https://godoc.org/github.com/i-core/oauth2w
-
 [build-img]: https://travis-ci.com/i-core/oauth2w.svg?branch=master
 [build]: https://travis-ci.com/i-core/oauth2w
-
 [codecov-img]: https://codecov.io/gh/i-core/oauth2w/branch/master/graph/badge.svg
 [codecov]: https://codecov.io/gh/i-core/oauth2w
-
 [goreport-img]: https://goreportcard.com/badge/github.com/i-core/oauth2w
 [goreport]: https://goreportcard.com/report/github.com/i-core/oauth2w
-
 [contrib]: https://github.com/i-core/.github/blob/master/CONTRIBUTING.md
 [license]: LICENSE
-
 [oidc-spec-core]: https://openid.net/specs/openid-connect-core-1_0.html
 [hydra]: https://github.com/ory/hydra
 [werther]: https://github.com/i-core/werther
