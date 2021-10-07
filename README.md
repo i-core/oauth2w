@@ -17,8 +17,10 @@ go get github.com/i-core/oauth2w
 3. The middleware requests user roles using the interface `oauth2w.RoleFinder`.
 4. The middleware validates that the user has the required roles, and according to it, allows or not the HTTP request.
 
-**Notes**. Getting user roles is out of scope the library. You must provide an implementation of `oauth2w.RoleFinder`
+**Note 1**. Getting user roles is out of scope the library. You must provide an implementation of `oauth2w.RoleFinder`
 that receives user claims and returns the user's roles.
+
+**Note 2**. The middleware add the default role "\_default" to each authenticated user. You can use it in order to transparently add an access to endpoints that each authenticated user must have an access for.
 
 ## Usage
 
