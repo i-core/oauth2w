@@ -15,10 +15,22 @@ import (
 	"net/http"
 )
 
+type ctxkey string
+
 const (
 	errMsgInternalServerError = "internal server error"
 	errMsgPermissionDenied    = "permission denied"
+
+	claimEmail = "email"
+
+	ctxkeyUser ctxkey = "github.com/i-core/oauth2w/user"
 )
+
+// User contains data of an authenticated user.
+type User struct {
+	Email string
+	Roles []string
+}
 
 // LogFn is a function that provides a logging function for HTTP request.
 type LogFn func(context.Context) func(string, ...interface{})
@@ -169,6 +181,19 @@ func New(endpoint string, roleFinder RoleFinder, opts ...Option) (func([]string)
 					}
 				}
 
+				emailClaim, ok := claims[claimEmail]
+				if !ok {
+					httpError(w, http.StatusInternalServerError, "")
+					logDebug("Authorization failed while finding email", "claims", claims)
+					return
+				}
+				email, ok := emailClaim.(string)
+				if !ok || email == "" {
+					httpError(w, http.StatusInternalServerError, "")
+					logDebug("Authorization failed: invalid email", "claims", claims)
+					return
+				}
+
 				roles, err := cnf.roleFinder.FindRoles(claims)
 				if err != nil {
 					httpError(w, http.StatusInternalServerError, "")
@@ -192,7 +217,7 @@ func New(endpoint string, roleFinder RoleFinder, opts ...Option) (func([]string)
 				}
 
 				logDebug("Authorization is successful", "token", token)
-				next.ServeHTTP(w, r)
+				next.ServeHTTP(w, r.WithContext(contextWithUser(r.Context(), &User{Email: email, Roles: roles})))
 			})
 		}
 	}, nil
@@ -206,4 +231,18 @@ func httpError(w http.ResponseWriter, code int, msg string) {
 	if err := json.NewEncoder(w).Encode(map[string]interface{}{"message": msg}); err != nil {
 		panic(err)
 	}
+}
+
+// FindUser returs data of an authenticated user from the request context.
+func FindUser(ctx context.Context) *User {
+	v := ctx.Value(ctxkeyUser)
+	user, ok := v.(*User)
+	if !ok || v == nil {
+		return nil
+	}
+	return user
+}
+
+func contextWithUser(ctx context.Context, user *User) context.Context {
+	return context.WithValue(ctx, ctxkeyUser, user)
 }
