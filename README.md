@@ -108,6 +108,35 @@ func main() {
 }
 ```
 
+### Accessing user data
+
+```go
+package main
+
+import (
+    "fmt"
+    "net/http"
+    "os"
+
+    "github.com/i-core/oauth2w"
+)
+
+const oidcEndpoint = "https://openid-connect-provider.org"
+
+func main() {
+    authw, err := oauth2w.New(oidcEndpoint, &RoleFinder{})
+    if err != nil {
+        fmt.Fprintln(os.Stderr, err)
+        os.Exit(1)
+    }
+    http.HandleFunc("/profile", authw(func(w http.ResponseWriter, r *http.Request) {
+        user := oauth2w.FindUser(r.Context())
+        fmt.Printf("User %v\n", user)
+    }))
+    fmt.Println(http.ListenAndServe(":8080", nil))
+}
+```
+
 ### Usage with Ory Hydra and Werther
 
 When you use OpenID Connect Provider [ORY Hydra][hydra] with Identity Provider [Werther][werther] you can use
@@ -167,19 +196,14 @@ The code in this project is licensed under [MIT license][license].
 
 [doc-img]: https://godoc.org/github.com/i-core/oauth2w?status.svg
 [doc]: https://godoc.org/github.com/i-core/oauth2w
-
 [build-img]: https://travis-ci.com/i-core/oauth2w.svg?branch=master
 [build]: https://travis-ci.com/i-core/oauth2w
-
 [codecov-img]: https://codecov.io/gh/i-core/oauth2w/branch/master/graph/badge.svg
 [codecov]: https://codecov.io/gh/i-core/oauth2w
-
 [goreport-img]: https://goreportcard.com/badge/github.com/i-core/oauth2w
 [goreport]: https://goreportcard.com/report/github.com/i-core/oauth2w
-
 [contrib]: https://github.com/i-core/.github/blob/master/CONTRIBUTING.md
 [license]: LICENSE
-
 [oidc-spec-core]: https://openid.net/specs/openid-connect-core-1_0.html
 [hydra]: https://github.com/ory/hydra
 [werther]: https://github.com/i-core/werther

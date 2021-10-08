@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/i-core/oauth2w"
+	"github.com/kylelemons/godebug/pretty"
 )
 
 func TestNew(t *testing.T) {
@@ -100,6 +101,7 @@ func TestMiddleware(t *testing.T) {
 		oidcStatus int
 		oidcBody   []byte
 		wantStatus int
+		wantUser   *oauth2w.User
 	}{
 		{
 			name:       "empty required roles",
@@ -147,8 +149,7 @@ func TestMiddleware(t *testing.T) {
 			wantStatus: http.StatusInternalServerError,
 		},
 		{
-			name:       "find roles error",
-			roleFinder: &testRoleFinder{err: fmt.Errorf("find roles error")},
+			name:       "userinfo without a email claim",
 			roles:      []string{"user"},
 			token:      "foo",
 			oidcStatus: http.StatusOK,
@@ -156,20 +157,38 @@ func TestMiddleware(t *testing.T) {
 			wantStatus: http.StatusInternalServerError,
 		},
 		{
+			name:       "userinfo with an invalid email claim",
+			roles:      []string{"user"},
+			token:      "foo",
+			oidcStatus: http.StatusOK,
+			oidcBody:   toJSON(map[string]interface{}{"email": 1, "roles": []interface{}{"test"}}),
+			wantStatus: http.StatusInternalServerError,
+		},
+		{
+			name:       "find roles error",
+			roleFinder: &testRoleFinder{err: fmt.Errorf("find roles error")},
+			roles:      []string{"user"},
+			token:      "foo",
+			oidcStatus: http.StatusOK,
+			oidcBody:   toJSON(map[string]interface{}{"email": "test@example.org", "roles": []interface{}{"test"}}),
+			wantStatus: http.StatusInternalServerError,
+		},
+		{
 			name:       "unauthorized",
 			roles:      []string{"user"},
 			token:      "foo",
 			oidcStatus: http.StatusOK,
-			oidcBody:   toJSON(map[string]interface{}{"roles": []interface{}{"test"}}),
+			oidcBody:   toJSON(map[string]interface{}{"email": "test@example.org", "roles": []interface{}{"test"}}),
 			wantStatus: http.StatusForbidden,
 		},
 		{
-			name:       "authorized",
+			name:       "authorized with a custom role",
 			roles:      []string{"user"},
 			token:      "foo",
 			oidcStatus: http.StatusOK,
-			oidcBody:   toJSON(map[string]interface{}{"roles": []interface{}{"user"}}),
+			oidcBody:   toJSON(map[string]interface{}{"email": "test@example.org", "roles": []interface{}{"user"}}),
 			wantStatus: http.StatusOK,
+			wantUser:   &oauth2w.User{Email: "test@example.org", Roles: []string{"user"}},
 		},
 		{
 			name:       "with log",
@@ -186,8 +205,9 @@ func TestMiddleware(t *testing.T) {
 			roles:      []string{"user"},
 			token:      "foo",
 			oidcStatus: http.StatusOK,
-			oidcBody:   toJSON(map[string]interface{}{"roles": []interface{}{"user"}}),
+			oidcBody:   toJSON(map[string]interface{}{"email": "test@example.org", "roles": []interface{}{"user"}}),
 			wantStatus: http.StatusOK,
+			wantUser:   &oauth2w.User{Email: "test@example.org", Roles: []string{"user"}},
 		},
 	}
 	for _, tc := range testCases {
@@ -233,7 +253,11 @@ func TestMiddleware(t *testing.T) {
 				t.Fatalf("failed to create the middleware: %s", err)
 			}
 			authw := authwFn(tc.roles)
-			h := authw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+
+			var gotUser *oauth2w.User
+			h := authw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				gotUser = oauth2w.FindUser(r.Context())
+			}))
 
 			w := httptest.NewRecorder()
 			r := httptest.NewRequest(http.MethodGet, "http://test", nil)
@@ -244,6 +268,15 @@ func TestMiddleware(t *testing.T) {
 
 			if w.Code != tc.wantStatus {
 				t.Errorf("got status %d, want status %d", w.Code, tc.wantStatus)
+			}
+			if w.Code == http.StatusOK {
+				if diff := pretty.Compare(gotUser, tc.wantUser); diff != "" {
+					t.Errorf("diff: (-got + want)\n%s", diff)
+				}
+			} else {
+				if gotUser != nil {
+					t.Errorf("got user data in the request context, want no user data in the request context")
+				}
 			}
 			if tc.withLog && !spy.logCalled {
 				t.Errorf("got no one call of logPrint function, want logPrint function to be called")
