@@ -21,7 +21,8 @@ const (
 	errMsgInternalServerError = "internal server error"
 	errMsgPermissionDenied    = "permission denied"
 
-	claimEmail = "email"
+	claimEmail  = "email"
+	defaultRole = "_default"
 
 	ctxkeyUser ctxkey = "github.com/i-core/oauth2w/user"
 )
@@ -200,6 +201,7 @@ func New(endpoint string, roleFinder RoleFinder, opts ...Option) (func([]string)
 					logDebug("Authorization failed while finding roles", "claims", claims, "rolesClaim", err)
 					return
 				}
+				roles = append(roles, defaultRole)
 
 				var found bool
 				for _, wr := range wantRoles {

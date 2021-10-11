@@ -188,7 +188,16 @@ func TestMiddleware(t *testing.T) {
 			oidcStatus: http.StatusOK,
 			oidcBody:   toJSON(map[string]interface{}{"email": "test@example.org", "roles": []interface{}{"user"}}),
 			wantStatus: http.StatusOK,
-			wantUser:   &oauth2w.User{Email: "test@example.org", Roles: []string{"user"}},
+			wantUser:   &oauth2w.User{Email: "test@example.org", Roles: []string{"user", "_default"}},
+		},
+		{
+			name:       "authorized with the default role",
+			roles:      []string{"_default"},
+			token:      "foo",
+			oidcStatus: http.StatusOK,
+			oidcBody:   toJSON(map[string]interface{}{"email": "test@example.org", "roles": []interface{}{"user"}}),
+			wantStatus: http.StatusOK,
+			wantUser:   &oauth2w.User{Email: "test@example.org", Roles: []string{"user", "_default"}},
 		},
 		{
 			name:       "with log",
@@ -207,7 +216,7 @@ func TestMiddleware(t *testing.T) {
 			oidcStatus: http.StatusOK,
 			oidcBody:   toJSON(map[string]interface{}{"email": "test@example.org", "roles": []interface{}{"user"}}),
 			wantStatus: http.StatusOK,
-			wantUser:   &oauth2w.User{Email: "test@example.org", Roles: []string{"user"}},
+			wantUser:   &oauth2w.User{Email: "test@example.org", Roles: []string{"user", "_default"}},
 		},
 	}
 	for _, tc := range testCases {
